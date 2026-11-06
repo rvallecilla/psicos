@@ -1,0 +1,33 @@
+# --- Secretos y entorno local ---
+.Renviron
+.env
+*.pem
+*.key
+
+# --- Artefactos de sesión R ---
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+*.Rproj
+
+# --- renv: librería local (NO versionar); sí se versionan renv.lock y renv/activate.R ---
+renv/library/
+renv/local/
+renv/cellar/
+renv/lock/
+renv/python/
+renv/sandbox/
+renv/staging/
+
+# --- Scripts locales de setup (no versionar) ---
+setup_renv.R
+
+# --- Despliegue / IDE / SO ---
+rsconnect/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.log
+.vscode/
+.idea/

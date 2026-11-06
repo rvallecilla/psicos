@@ -1,0 +1,11 @@
+# Copiar a .Renviron (mismo directorio de la app o home del usuario) y completar.
+# No versionar .Renviron con secretos reales.
+#
+#   copy .Renviron.example .Renviron   # Windows cmd
+#   cp .Renviron.example .Renviron     # Unix / Git Bash
+
+CHAOS_BASE_URL=http://172.22.129.126:8001
+CHAOS_BEARER_TOKEN=
+CHAOS_USERNAME=
+
+# No incluir CHAOS_PASSWORD aquí: se introduce en la UI por sesión.
