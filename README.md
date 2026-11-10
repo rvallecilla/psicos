@@ -36,15 +36,17 @@ Copy-Item .Renviron.example .Renviron
 cp .Renviron.example .Renviron
 ```
 
-2. Edite `.Renviron` (sin password):
+2. Edite `.Renviron` o use **Guardar credenciales** en la UI:
 
 ```
 CHAOS_BASE_URL=http://172.22.129.126:8001
+CHAOS_PORT=8001
 CHAOS_BEARER_TOKEN=su_bearer_token
 CHAOS_USERNAME=usuario_chaos_admin
+CHAOS_PASSWORD=su_password
 ```
 
-3. La **contraseña Chaos** se introduce solo en la UI (no se recomienda guardarla en archivo).
+3. `.Renviron` es local y está en `.gitignore` (no subir secretos al repo).
 
 Autenticación doble:
 
@@ -74,11 +76,14 @@ La app carga defaults de `CHAOS_*` si existen en el entorno / `.Renviron`.
 
 ## Uso en la UI
 
-1. **Conexión** — Base URL, Bearer, usuario y contraseña Chaos → **Probar conexión** (ping). Indicador verde/rojo.
+1. **Conexión** — Host/IP + **Puerto** (default `8001`), Bearer, usuario y contraseña Chaos → **Conectar**. **Guardar credenciales** persiste Bearer + usuario/contraseña Chaos + host/puerto en `.Renviron` local (no se versiona).
 2. **Operación** — `cell_name` (ej. `CAL.Ingenio_S1`), tecnología Auto/4G/5G → **Encender** o **Apagar**.
-3. Confirme en el modal (obligatorio).
-4. **Resultado** — éxito/error, campos clave (`region`, `dn`, `plan_name`, etc.) y JSON colapsable.
-5. **Historial** — últimas operaciones de la sesión (sin secretos).
+3. Confirme en el modal (obligatorio). Tras éxito, se consulta el **estado** automáticamente.
+4. **Estado del sector** — **Estado**, opcional **Live NetAct**, auto-refresh 15/30/60 s (OFF). Semáforo ENCENDIDO / APAGADO / DESCONOCIDO. Si el auto-refresh de estado está activo, también refresca PRB como máximo cada 60 s.
+5. **Carga PRB** — Ambos/DL/UL, `date_from`/`date_to` (default 24 h, máx. 3 días), **Consultar PRB**, auto-refresh PRB ≥ 60 s. Tarjetas con valor actual grande + stats + gráfico plotly 0–100 %.
+6. **Usuarios activos (LTE_717b)** — Avg active users per cell (RAW 15 min). Valor actual grande + min/avg/max + serie temporal. Auto-refresh ≥ 60 s.
+7. **Resultado** — éxito/error de la operación y JSON colapsable.
+8. **Historial** — últimas operaciones/consultas manuales de la sesión (sin secretos).
 
 ### Formato de `cell_name`
 
@@ -110,6 +115,44 @@ sector_power(
   tech       = NULL,             # o "4G" / "5G"
   timeout    = 120
 )
+
+# Estado (POST JSON; timeout 30 s OSS / 120 s live)
+sector_status(
+  base_url  = "http://172.22.129.126:8001",
+  token     = Sys.getenv("CHAOS_BEARER_TOKEN"),
+  username  = Sys.getenv("CHAOS_USERNAME"),
+  password  = "••••",
+  cell_name = "CAL.Ingenio_S1",
+  tech      = NULL,             # o "4g" / "5g"
+  live      = FALSE,
+  timeout   = 30
+)
+
+# Carga PRB LTE (RAW; timeout 60 s; default últimas 24 h)
+kpi_lte_prb(
+  base_url  = "http://172.22.129.126:8001",
+  token     = Sys.getenv("CHAOS_BEARER_TOKEN"),
+  username  = Sys.getenv("CHAOS_USERNAME"),
+  password  = "••••",
+  cell_name = "CAL.Ingenio_S1",
+  kpis      = c("LTE_PRB_DL", "LTE_PRB_UL"),
+  date_from = NULL,
+  date_to   = NULL,
+  timeout   = 60
+)
+
+# Usuarios activos LTE_717b (RAW 15 min; timeout 60 s)
+kpi_lte_717b(
+  base_url  = "http://172.22.129.126:8001",
+  token     = Sys.getenv("CHAOS_BEARER_TOKEN"),
+  username  = Sys.getenv("CHAOS_USERNAME"),
+  password  = "••••",
+  cell_name = "CAL.Ingenio_S1",
+  date_from = NULL,
+  date_to   = NULL,
+  timeout   = 60
+)
+# Último valor: resp$body$kpis$LTE_717b$latest$value
 ```
 
 ### Ejemplo de prueba rápida (consola)
@@ -119,15 +162,23 @@ source("R/api.R")
 
 base  <- Sys.getenv("CHAOS_BASE_URL", "http://172.22.129.126:8001")
 token <- Sys.getenv("CHAOS_BEARER_TOKEN")
+user  <- Sys.getenv("CHAOS_USERNAME")
+pass  <- Sys.getenv("CHAOS_PASSWORD")
 
 # 1) Ping
 ping_api(base, token)
 
-# 2) Encender sector de prueba
-sector_power(base, token, "admin_user", "••••", "CAL.Ingenio_S1", desired_on = TRUE)
+# 2) Estado OSS
+sector_status(base, token, user, pass, "CAL.Ingenio_S1", live = FALSE)
 
-# 3) Apagar
-sector_power(base, token, "admin_user", "••••", "CAL.Ingenio_S1", desired_on = FALSE)
+# 3) KPI PRB DL/UL (últimas 24 h)
+kpi_lte_prb(base, token, user, pass, cell_name = "CAL.Ingenio_S1")
+
+# 4) Usuarios activos LTE_717b
+kpi_lte_717b(base, token, user, pass, cell_name = "CAL.Ingenio_S1")
+
+# 5) Encender / apagar (opcional)
+sector_power(base, token, user, pass, "CAL.Ingenio_S1", desired_on = TRUE)
 ```
 
 ## API (referencia)
@@ -138,6 +189,9 @@ sector_power(base, token, "admin_user", "••••", "CAL.Ingenio_S1", desire
 |--------|------|-----|
 | `GET` | `/api/external/netact/sector-power/ping/` | Health + validación Bearer |
 | `POST` | `/api/external/netact/sector-power/` | Encender/apagar sector |
+| `POST` | `/api/external/netact/sector-power/status/` | Consultar estado (OSS o live) |
+| `POST` | `/api/external/kpi/lte-prb/` | Carga PRB DL/UL (tablas RAW) |
+| `POST` | `/api/external/kpi/lte-717b/` | Usuarios activos Avg (LTE_717b, RAW 15 min) |
 
 Body POST (ejemplo):
 
@@ -184,14 +238,17 @@ No se versiona `renv/library/` (paquetes instalados localmente).
 
 1. Instale paquetes y configure `.Renviron` con Base URL, Bearer y usuario.
 2. `shiny::runApp()` → abra el navegador.
-3. Ingrese contraseña Chaos → **Probar conexión** → indicador verde y mensaje `bearer_ok`.
-4. Ingrese un `cell_name` de prueba válido → **Encender** → confirme → revise panel Resultado e historial.
-5. Repita con **Apagar** (modal de advertencia) y verifique éxito/error legible.
-6. Pruebe a propósito un Bearer incorrecto (401) y un usuario sin NetAct (403) para validar mensajes.
+3. Ingrese contraseña Chaos → **Conectar** → indicador verde y mensaje `bearer_ok`.
+4. **Estado** → semáforo ENCENDIDO/APAGADO; pruebe Live NetAct y auto-refresh.
+5. **Consultar PRB** → tarjetas DL/UL con valor actual (%), stats min/avg/max y gráfico 0–100 %; active auto-refresh PRB (≥ 60 s).
+6. **Consultar usuarios activos** → valor grande “N usuarios”, stats y serie 15 min (LTE_717b).
+7. **Encender** → confirme → Resultado + estado; KPI no se fuerza tras power (opcional manual).
+8. **Apagar** (modal de advertencia) y verifique semáforo + historial.
+9. Cadena mínima: **ping → status → kpi lte-prb → kpi lte-717b**.
 
 ## Seguridad operativa
 
 - Confirmación modal antes de cualquier cambio de potencia.
 - Aviso reforzado al apagar.
 - Sin logs visibles de password ni Bearer.
-- Credenciales Chaos solo en memoria de la sesión Shiny.
+- Credenciales pueden persistirse solo en `.Renviron` local (gitignore); nunca en el código ni en el historial/JSON de la UI.
